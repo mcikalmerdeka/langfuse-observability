@@ -25,82 +25,101 @@ else:
 # Initialize OpenLIT instrumentation
 openlit.init(tracer=langfuse._otel_tracer, disable_batch=True)
 
-# Define structured output schemas
-class ResearchFindings(BaseModel):
-    topic: str
-    key_findings: str
-    sources: str
+# Define structured output schemas for agents
+class DestinationInfo(BaseModel):
+    destination: str
+    top_attractions: str
+    best_time_to_visit: str
+    local_tips: str
+    weather_info: str
 
 
-class TrendAnalysis(BaseModel):
-    topic: str
-    current_trends: str
-    market_impact: str
+class AccommodationOptions(BaseModel):
+    destination: str
+    hotel_recommendations: str
+    budget_range: str
+    booking_tips: str
 
 
-class TechResearchReport(BaseModel):
-    topic: str
-    executive_summary: str
-    key_findings: str
-    trend_analysis: str
-    sources: str
+class DailyItinerary(BaseModel):
+    destination: str
+    trip_duration: str
+    day_by_day_plan: str
 
 
 # Create specialized agents
-research_agent = Agent(
-    id="research-agent",
-    name="Research Agent",
-    role="Expert at finding and gathering information from the web",
-    description="You are a skilled researcher who finds accurate, up-to-date information on technology topics.",
+destination_researcher = Agent(
+    id="destination-researcher",
+    name="Destination Researcher",
+    role="Expert at researching travel destinations",
+    description="You are a travel expert who finds the best attractions, local tips, weather info, and cultural insights for destinations.",
     instructions=[
-        "Search for the most recent and relevant information",
-        "Focus on credible sources and verified data",
-        "Summarize findings clearly and concisely",
+        "Search for top attractions and must-see places",
+        "Find current weather conditions and best times to visit",
+        "Discover local tips, cultural etiquette, and hidden gems",
+        "Focus on practical, up-to-date information",
     ],
     model=OpenAIChat(id="gpt-4.1-mini"),
     tools=[TavilyTools()],
-    output_schema=ResearchFindings,
+    output_schema=DestinationInfo,
     markdown=True,
 )
 
-analyst_agent = Agent(
-    id="analyst-agent",
-    name="Trend Analyst Agent",
-    role="Expert at analyzing technology trends and market impact",
-    description="You are a technology analyst who identifies patterns, trends, and their implications.",
+hotel_finder = Agent(
+    id="hotel-finder",
+    name="Hotel & Accommodation Finder",
+    role="Expert at finding the best hotels and accommodations",
+    description="You are a travel accommodation specialist who finds the best places to stay based on budget and preferences.",
     instructions=[
-        "Analyze the research findings for key trends",
-        "Identify market implications and future directions",
-        "Provide actionable insights",
+        "Search for highly-rated hotels and accommodations",
+        "Consider different budget ranges (budget, mid-range, luxury)",
+        "Look for good locations near attractions",
+        "Provide booking tips and best times to book",
     ],
     model=OpenAIChat(id="gpt-4.1-mini"),
-    output_schema=TrendAnalysis,
+    tools=[TavilyTools()],
+    output_schema=AccommodationOptions,
     markdown=True,
 )
 
-# Create the team
-tech_research_team = Team(
-    name="Technology Research Team",
-    members=[research_agent, analyst_agent],
-    model=OpenAIChat(id="gpt-5-mini"),
+itinerary_planner = Agent(
+    id="itinerary-planner",
+    name="Itinerary Planner",
+    role="Expert at creating detailed day-by-day travel itineraries",
+    description="You are a travel itinerary specialist who creates well-organized, realistic day-by-day plans.",
     instructions=[
-        "Coordinate with team members to provide comprehensive technology research",
-        "First, delegate research tasks to gather information",
-        "Then, delegate analysis tasks to identify trends and insights",
-        "Combine findings into a cohesive final report",
+        "Create a logical day-by-day schedule",
+        "Group nearby attractions together to minimize travel time",
+        "Include time for meals, rest, and flexibility",
+        "Balance activities with relaxation",
     ],
-    output_schema=TechResearchReport,
+    model=OpenAIChat(id="gpt-4.1-mini"),
+    output_schema=DailyItinerary,
+    markdown=True,
+)
+
+# Create the Travel Planning Team
+travel_team = Team(
+    name="Travel Planning Team",
+    members=[destination_researcher, hotel_finder, itinerary_planner],
+    model=OpenAIChat(id="gpt-5.2"),
+    instructions=[
+        "You are a travel planning manager coordinating a team of specialists",
+        "First, ask the Destination Researcher to gather info about the destination",
+        "Then, ask the Hotel Finder to find accommodation options",
+        "Finally, ask the Itinerary Planner to create a day-by-day schedule",
+        "Combine all findings into a comprehensive, easy-to-read travel plan",
+    ],
     show_members_responses=True,
     markdown=True,
-    debug_mode=True,
 )
 
 # Wrap team execution in @observe to create a single grouped trace
-@observe(name="Tech Research Team Pipeline")
-def run_tech_research(query: str):
-    """Run the tech research team and return the response."""
-    response = tech_research_team.run(query)
-    
+@observe(name="Travel Planning Pipeline")
+def plan_trip(query: str):
+    """Run the travel planning team and return the response."""
+    response = travel_team.run(query)
+
     # Update the current trace with input/output
     langfuse.update_current_trace(
         input=query,
@@ -111,6 +130,7 @@ def run_tech_research(query: str):
 
 # Use the team
 if __name__ == "__main__":
-    result = run_tech_research("What is currently trending AI news in IDE business of the year 2025?")
+    query = "Plan a 5-day trip to Kyoto, Japan for a solo traveler interested in temples, traditional culture, and local food. Budget is mid-range."
+    result = plan_trip(query)
     print(result.content if result else "No response")
     langfuse.flush()  # Ensure traces are sent before script exits
