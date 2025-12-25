@@ -7,6 +7,7 @@ from agno.agent import Agent
 from agno.team import Team
 from agno.models.openai import OpenAIChat
 from agno.tools import tool
+from agno.utils.pprint import pprint_run_response
 from langfuse import get_client, observe, propagate_attributes
 import openlit
 
@@ -203,7 +204,15 @@ travel_team = Team(
         "Ask the Destination Researcher to gather info about the destination",
         "Ask the Hotel Finder to find accommodation options", 
         "Ask the Itinerary Planner to create a day-by-day schedule based on the findings",
-        "Combine all findings into a comprehensive, easy-to-read travel plan",
+
+        "You will also act as the final report writer, combining all findings into a comprehensive, easy-to-read travel plan",
+        "The final report should be in markdown format with the following format:",
+        "# Comprehensive Travel Plan: [Destination] [Amount of Days] Day Trip",
+        "## Destination Overview",
+        "## Accommodation Recommendations",
+        "### [Amount of Days] Day Itinerary",
+        "### Additional Notes and Travel Tips",
+        "### Summary Table of the Day-by-Day Plan",
     ],
     show_members_responses=True,
     markdown=True,
@@ -211,8 +220,8 @@ travel_team = Team(
     # ⭐ KEY: Delegate to all members at once for parallel execution
     delegate_to_all_members=True,
 
-    # Enable debug mode for detailed events execution in terminal
-    debug_mode=True
+    # # Enable debug mode for detailed events execution in terminal
+    # debug_mode=True
 )
 
 @observe(as_type="agent", name="travel-planning-team")
@@ -277,7 +286,7 @@ if __name__ == "__main__":
     result = asyncio.run(plan_trip(query))
     
     # Print the result
-    print(result.content if result else "No response")
+    pprint_run_response(result, markdown=True)
 
     langfuse.flush()  # Ensure traces are sent before script exits
 

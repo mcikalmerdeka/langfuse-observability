@@ -9,6 +9,7 @@ from agno.models.openai import OpenAIChat
 from agno.tools import tool
 from agno.workflow import Workflow, Step
 from agno.workflow.parallel import Parallel
+from agno.utils.pprint import pprint_run_response
 from langfuse import get_client, observe, propagate_attributes
 import openlit
 
@@ -225,6 +226,13 @@ synthesis_agent = Agent(
         "Combine all findings into a comprehensive, easy-to-read travel plan",
         "Ensure the plan is well-organized and addresses all aspects of the trip",
         "Present the information in a clear, actionable format",
+        "The final report should be in markdown format with the following format:",
+        "# Comprehensive Travel Plan: [Destination] [Amount of Days] Day Trip",
+        "## Destination Overview",
+        "## Accommodation Recommendations",
+        "### [Amount of Days] Day Itinerary",
+        "### Additional Notes and Travel Tips",
+        "### Summary Table of the Day-by-Day Plan",
     ],
     model=OpenAIChat(id="gpt-4.1-mini"),
     markdown=True,
@@ -319,6 +327,6 @@ if __name__ == "__main__":
     result = asyncio.run(plan_trip(query))
     
     # Print the result
-    print(result.content if result else "No response")
+    pprint_run_response(result, markdown=True)
 
     langfuse.flush()  # Ensure traces are sent before script exits
