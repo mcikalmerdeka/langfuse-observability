@@ -8,7 +8,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.tools import tool
 from agno.run import RunContext
-from agno.workflow import Workflow, Step, Loop, Parallel, Router
+from agno.workflow import Workflow, Step, Loop, Parallel
 from agno.workflow.types import StepInput, StepOutput
 from agno.utils.pprint import pprint_run_response
 from langfuse import get_client, observe, propagate_attributes
@@ -76,7 +76,7 @@ class ActivitiesInfo(BaseModel):
     transportation_options: str
     local_experiences: str
     estimated_costs: str
-
+    
 
 class DailyItinerary(BaseModel):
     destination: str
@@ -135,6 +135,7 @@ activities_researcher = Agent(
     role="Expert at finding local activities, transportation, and unique experiences",
     description="You are a travel activities specialist who finds the best things to do, local transportation options, and unique experiences.",
     instructions=[
+        "Specify the destination name",
         "Search for popular activities and unique local experiences",
         "Find transportation options (public transit, car rental, walking routes)",
         "Discover food tours, cultural workshops, and authentic local experiences",
@@ -152,9 +153,9 @@ activities_researcher = Agent(
 
 itinerary_planner = Agent(
     id="itinerary-planner",
-    name="Middle Manager - Itinerary Planner",
-    role="Middle manager who synthesizes team research into comprehensive travel plans",
-    description="You are a middle manager who takes research from your team and creates executive-ready travel plans for VP approval.",
+    name="Team Lead - Itinerary Planner",
+    role="Team lead who synthesizes team research into comprehensive travel plans",
+    description="You are a team lead who takes research from your team members and creates manager-ready travel plans for approval.",
     instructions=[
         "You receive research from your team (destination, hotel, and activities researchers)",
         "Your job is to synthesize this information into a comprehensive, polished travel plan",
@@ -165,14 +166,14 @@ itinerary_planner = Agent(
         "- Create a logical day-by-day schedule balancing activities with rest",
         "- Group nearby attractions to minimize travel time",
         "",
-        "When revising based on VP feedback:",
-        "- Carefully read the VP's critique and address ALL points raised",
+        "When revising based on Manager feedback:",
+        "- Carefully read the Manager's critique and address ALL points raised",
         "- Improve structure, clarity, and completeness as requested",
         "- Work with the EXISTING research data - don't make up new information",
-        "- Polish the presentation for executive approval",
+        "- Polish the presentation for manager approval",
         "",
         "When presenting the final approved plan:",
-        "- Present the VP-approved version as the final deliverable",
+        "- Present the Manager-approved version as the final deliverable",
         "- Make it user-friendly and ready for the traveler to use",
         "- Ensure it's comprehensive and professional",
         "",
@@ -182,9 +183,35 @@ itinerary_planner = Agent(
         "## Destination Overview (from destination research)",
         "## Accommodation Recommendations (from hotel research)",
         "## Activities & Experiences (from activities research)",
+        "",
         "## Day-by-Day Itinerary",
+        "IMPORTANT: Format the itinerary as a table with the following structure:",
+        "- Column 1: Day (with bold day headers like **Day 1: Theme**)",
+        "- Column 2: Activities & Timing (with time ranges and activity descriptions)",
+        "- Use format: HH:MM – HH:MM | Activity description",
+        "- Group activities by day with bold day headers in the Day column",
+        "- Example format:",
+        "  | Day | Activities & Timing |",
+        "  |-----|---------------------|",
+        "  | **Day 1: Arrival & Theme** | |",
+        "  | 09:00 – 11:00 | Activity description |",
+        "  | 11:30 – 13:00 | Next activity |",
+        "",
         "## Transportation Guide",
+        "",
         "## Budget Breakdown",
+        "IMPORTANT: Format the budget as a table with the following structure:",
+        "- Column 1: Category (e.g., Accommodation, Meals, Transportation, etc.)",
+        "- Column 2: Estimated Cost (in local currency)",
+        "- Column 3: Notes (brief explanation or details)",
+        "- Include a bold **Total** row at the bottom",
+        "- Example format:",
+        "  | Category | Estimated Cost (JPY) | Notes |",
+        "  |----------|---------------------|-------|",
+        "  | Accommodation | 25,000/night | Hotel details |",
+        "  | Meals | 4,000/day | Dining style |",
+        "  | **Total (X days)** | **~XXX,XXX JPY** | Per person estimate |",
+        "",
         "## Additional Notes and Travel Tips",
     ],
     model=OpenAIChat(id="gpt-4.1-mini"),
@@ -192,18 +219,18 @@ itinerary_planner = Agent(
 )
 
 # ============================================================================
-# CRITIQUE/REVISION AGENT (using gpt-4.1 for more thorough analysis)
+# CRITIQUE/REVISION AGENT (recommended to use more capable model for managerial-level critique)
 # ============================================================================
 
 critique_agent = Agent(
     id="critique-agent",
-    name="VP - Travel Plan Reviewer",
-    role="Senior executive who reviews and approves travel plans",
-    description="You are a VP-level reviewer who evaluates travel plans for quality and completeness before final approval.",
+    name="Manager - Travel Plan Reviewer",
+    role="Manager who reviews and approves travel plans",
+    description="You are a manager who evaluates travel plans for quality and completeness before final approval.",
     instructions=[
-        "You are reviewing a travel plan prepared by your middle manager (itinerary planner)",
-        "The middle manager has already synthesized research from the team (destination, hotel, activities researchers)",
-        "Your role is to provide executive-level feedback:",
+        "You are reviewing a travel plan prepared by your team lead (itinerary planner)",
+        "The team lead has already synthesized research from the team (destination, hotel, activities researchers)",
+        "Your role is to provide managerial-level feedback:",
         "",
         "Evaluate the plan for:",
         "1. Completeness - Does it cover all essential aspects?",
@@ -218,9 +245,9 @@ critique_agent = Agent(
         "When requesting revisions:",
         "- Focus on how the REPORT should be improved (structure, clarity, completeness)",
         "- Don't ask for new research - work with existing team data",
-        "- Give specific, actionable feedback the middle manager can implement",
+        "- Give specific, actionable feedback the team lead can implement",
     ],
-    model=OpenAIChat(id="gpt-4.1"),  # Using more capable model for executive-level critique
+    model=OpenAIChat(id="gpt-4.1-mini"),  # Using more capable model for managerial-level critique
     output_schema=CritiqueResult,
     markdown=True,
 )
@@ -291,8 +318,8 @@ itinerary_step = Step(
 
 def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepOutput:  # type: ignore[arg-type]
     """
-    Critique agent reviews the itinerary and provides feedback.
-    This function stores the critique feedback for the itinerary planner to use.
+    Manager reviews the itinerary and provides feedback.
+    This function stores the critique feedback for the team lead to use.
     """
     # Ensure session_state is initialized
     if run_context.session_state is None:
@@ -302,13 +329,13 @@ def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepO
     iteration = run_context.session_state.get("revision_iteration", 0) + 1
     run_context.session_state["revision_iteration"] = iteration
     
-    print(f"\n🔍 VP Critique - Review #{iteration}/2")
+    print(f"\n🔍 Manager Review - Review #{iteration}/2")
     
     # Build context for critique
     itinerary_content = step_input.previous_step_content or ""
     
     critique_prompt = f"""
-    You are the VP reviewing a travel plan prepared by your team.
+    You are the Manager reviewing a travel plan prepared by your team lead.
     
     TRAVEL PLAN TO REVIEW (Draft #{iteration}):
     {itinerary_content}
@@ -344,7 +371,7 @@ def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepO
             run_context.session_state["last_critique"] = response.content
             
             status = "✅ APPROVED" if is_approved else "🔄 NEEDS REVISION"
-            print(f"   VP Decision: {status}")
+            print(f"   Manager Decision: {status}")
             
             return StepOutput(
                 content=response.content,
@@ -363,9 +390,9 @@ def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepO
 
 # Custom step for critique
 critique_step = Step(
-    name="VP Critique",
+    name="Manager Review",
     executor=critique_and_revise,  # type: ignore[arg-type]
-    description="VP reviews the travel plan and provides approval or revision feedback"
+    description="Manager reviews the travel plan and provides approval or revision feedback"
 )
 
 # ============================================================================
@@ -374,25 +401,38 @@ critique_step = Step(
 
 def revision_approved_condition(outputs: List[StepOutput], run_context: RunContext) -> bool:  # type: ignore[arg-type]
     """
-    End condition for the revision loop between itinerary planner and VP critique.
+    End condition for the revision loop between team lead and manager.
     Returns True to BREAK the loop (when approved or max iterations reached), False to continue.
+    
+    This function checks both:
+    1. Session state (primary) - where critique agent stores approval decision
+    2. Outputs (fallback) - in case session state is not available
     """
     # Ensure session_state is initialized
     if run_context.session_state is None:
         run_context.session_state = {}
     
+    # Primary check: session state (set by critique agent)
     is_approved: bool = run_context.session_state.get("critique_approved", False)
     iteration: int = run_context.session_state.get("revision_iteration", 0)
     
+    # Fallback check: if session state doesn't have approval info, check outputs
+    if not is_approved and outputs:
+        # Look for approval keywords in the last output (Manager's critique)
+        last_output = outputs[-1] if outputs else None
+        if last_output and last_output.content:
+            content_lower = str(last_output.content).lower()
+            is_approved = ("approved" in content_lower or "good" in content_lower) and "not approved" not in content_lower
+    
     if is_approved:
-        print(f"\n✅ Travel plan APPROVED by VP after {iteration} iteration(s)!")
+        print(f"\n✅ Travel plan APPROVED by Manager after {iteration} iteration(s)!")
         return True
     
     if iteration >= 2:
         print(f"\n⚠️ Max iterations reached ({iteration}). Finalizing plan.")
         return True
     
-    print(f"\n🔄 Middle Manager revising based on VP feedback...")
+    print(f"\n🔄 Team Lead revising based on Manager feedback...")
     return False
 
 # ============================================================================
@@ -403,22 +443,22 @@ def revision_approved_condition(outputs: List[StepOutput], run_context: RunConte
 final_report_step = Step(
     name="Present Final Report",
     agent=itinerary_planner,
-    description="Middle Manager presents the VP-approved travel plan to the user"
+    description="Team Lead presents the Manager-approved travel plan to the user"
 )
 
 # ============================================================================
-# COMBINED WORKFLOW - Simplified Architecture
+# COMBINED WORKFLOW - Travel Planning Workflow Architecture
 # ============================================================================
 
 travel_planning_workflow = Workflow(
-    name="Travel Planning Workflow with VP Approval",
+    name="Travel Planning Workflow with Manager Approval",
     description="""
     A streamlined travel planning workflow:
     1. Research Team (destination, hotel, activities) runs in parallel ONCE
-    2. Middle Manager (itinerary planner) creates comprehensive report
-    3. VP (critique agent) reviews and provides feedback
-    4. Loop (max 1 revision): Middle Manager revises report based on VP feedback
-    5. Middle Manager presents final VP-approved report to user
+    2. Team Lead (itinerary planner) creates comprehensive report
+    3. Manager (critique agent) reviews and provides feedback
+    4. Loop (max 1 revision): Team Lead revises report based on Manager feedback
+    5. Team Lead presents final Manager-approved report to user
     """,
     # Initialize session state for tracking workflow progress
     session_state={
@@ -435,18 +475,18 @@ travel_planning_workflow = Workflow(
             name="Research Team Phase",
             description="Research team gathers destination, hotel, and activities data simultaneously"
         ),
-        # Step 2: Middle Manager + VP Loop (max 2 iterations: initial + 1 revision)
+        # Step 2: Team Lead + Manager Loop (max 2 iterations: initial + 1 revision)
         Loop(
-            name="Middle Manager <-> VP Revision Loop",
-            description="Itinerary planner (middle manager) works with VP to finalize the plan",
+            name="Team Lead <-> Manager Revision Loop",
+            description="Itinerary planner (team lead) works with Manager to finalize the plan",
             steps=[
-                itinerary_step,  # type: ignore[list-item] - Middle Manager creates/revises report
-                critique_step,  # type: ignore[list-item] - VP reviews and approves/requests revision
+                itinerary_step,  # type: ignore[list-item] - Team Lead creates/revises report
+                critique_step,  # type: ignore[list-item] - Manager reviews and approves/requests revision
             ],
             end_condition=revision_approved_condition,  # type: ignore[arg-type]
             max_iterations=2,  # Initial draft + 1 revision max
         ),
-        # Step 3: Middle Manager presents the final VP-approved report
+        # Step 3: Team Lead presents the final Manager-approved report
         final_report_step,  # type: ignore[list-item] - This becomes the final output to the user
     ],
 )
@@ -476,28 +516,28 @@ async def plan_trip(query: str):
         │   ├── hotel-finder (agent) → tavily-web-search
         │   └── activities-researcher (agent) → tavily-web-search
         │
-        ├── Middle Manager <-> VP Revision Loop (max 2 iterations)
+        ├── Team Lead <-> Manager Revision Loop (max 2 iterations)
         │   ├── Iteration 1:
-        │   │   ├── itinerary-planner (agent) → creates initial report
-        │   │   └── critique-agent (VP) → reviews and approves/requests revision
-        │   └── Iteration 2 (if VP requested revision):
-        │       ├── itinerary-planner (agent) → revises report based on VP feedback
-        │       └── critique-agent (VP) → final approval
+        │   │   ├── itinerary-planner (team lead) → creates initial report
+        │   │   └── critique-agent (manager) → reviews and approves/requests revision
+        │   └── Iteration 2 (if Manager requested revision):
+        │       ├── itinerary-planner (team lead) → revises report based on Manager feedback
+        │       └── critique-agent (manager) → final approval
         │
         └── Present Final Report 📋
-            └── itinerary-planner (agent) → presents VP-approved plan to user
+            └── itinerary-planner (team lead) → presents Manager-approved plan to user
     
     Benefits:
     - Research agents (Tavily tool calls) run ONLY ONCE at the start
     - Only itinerary planner revises in loop, no redundant research calls
     - Maximum 2 loop iterations = 1 revision opportunity
-    - Mimics real org structure: Team → Middle Manager → VP approval
+    - Mimics real org structure: Research Team → Team Lead → Manager approval
     - Final output is from itinerary planner (natural language), not critique (structured)
     """
     with propagate_attributes(
         user_id="cikalmerdeka",
         session_id="combined-workflow-001",
-        tags=["travel", "planning", "workflow", "vp-approval"],
+        tags=["travel", "planning", "workflow", "manager-approval"],
         version="2.0.0",
         metadata={
             "experiment": "simplified_workflow",
@@ -532,11 +572,11 @@ if __name__ == "__main__":
     print("=" * 70)
     print("\n🔄 Workflow Flow:")
     print("   1. Research Team (3 agents) → Parallel research (ONE TIME ONLY)")
-    print("   2. Middle Manager (itinerary planner) → Creates report")
-    print("   3. VP (critique agent) → Reviews report")
-    print("   4. [IF NEEDED] Middle Manager → Revises based on VP feedback")
-    print("   5. VP → Final approval")
-    print("   6. Middle Manager → Presents final approved plan to user 📋")
+    print("   2. Team Lead (itinerary planner) → Creates report")
+    print("   3. Manager (critique agent) → Reviews report")
+    print("   4. [IF NEEDED] Team Lead → Revises based on Manager feedback")
+    print("   5. Manager → Final approval")
+    print("   6. Team Lead → Presents final approved plan to user 📋")
     print("=" * 70)
     
     # Run the travel planning workflow
