@@ -433,7 +433,7 @@ critique_step = Step(
 # LOOP END CONDITION
 # ============================================================================
 
-def revision_approved_condition(outputs: List[StepOutput], run_context: RunContext) -> bool:  # type: ignore[arg-type]
+def revision_approved_condition(run_context: RunContext) -> bool:  # type: ignore[arg-type]
     """
     End condition for the revision loop between team lead and manager.
     Returns True to BREAK the loop (when approved or max iterations reached), False to continue.
