@@ -162,14 +162,21 @@ itinerary_planner = Agent(
         
         Your job is to synthesize this information into a comprehensive, polished travel plan
         
-        When creating the initial plan:
+        CURRENT STATUS:
+        - Revision iteration: {revision_iteration}
+        - Manager's last feedback: {manager_feedback}
+        - Previous draft: {previous_draft}
+        
+        When creating the initial plan (iteration 0):
         - Review ALL research from the destination, hotel, and activities team members
         - Synthesize their findings into a cohesive narrative
         - Create a logical day-by-day schedule balancing activities with rest
         - Group nearby attractions to minimize travel time
         
-        When revising based on Manager feedback:
-        - Carefully read the Manager's critique and address ALL points raised
+        When revising based on Manager feedback (iteration > 0):
+        - Carefully read the Manager's critique from session state: {manager_feedback}
+        - Review your previous draft: {previous_draft}
+        - Address ALL points raised in the feedback
         - Improve structure, clarity, and completeness as requested
         - Work with the EXISTING research data - don't make up new information
         - Polish the presentation for manager approval
@@ -210,6 +217,13 @@ itinerary_planner = Agent(
         ## Additional Notes and Travel Tips
     """),
     model=OpenAIChat(id="gpt-4.1-mini"),
+    # Enable session state for tracking revisions and feedback
+    session_state={
+        "revision_iteration": 0,
+        "manager_feedback": "No feedback yet - this is the initial draft",
+        "previous_draft": "No previous draft",
+    },
+    add_session_state_to_context=True,
     markdown=True,
 )
 
@@ -227,14 +241,20 @@ critique_agent = Agent(
         The team lead has already synthesized research from the team (destination, hotel, activities researchers)
         Your role is to provide managerial-level feedback:
         
+        CURRENT REVIEW STATUS:
+        - Review iteration: {revision_iteration}
+        - Previous feedback given: {manager_feedback}
+        
         Evaluate the plan for:
         1. Completeness - Does it cover all essential aspects?
         2. Coherence - Does the itinerary flow logically?
         3. Practicality - Are activities realistic within the timeframe?
         4. Value - Does it align with the budget and traveler preferences?
+        
         Decision criteria:
-        - On FIRST review: Be thorough but constructive. Approve if solid, or request specific improvements
-        - On SECOND review (if revision occurred): Be more lenient and approve if reasonably good
+        - On FIRST review (iteration 0): Be thorough but constructive. Approve if solid, or request specific improvements
+        - On SECOND review (iteration 1): Be more lenient and approve if reasonably good
+        
         When requesting revisions:
         - Focus on how the REPORT should be improved (structure, clarity, completeness)
         - Don't ask for new research - work with existing team data 
@@ -242,6 +262,13 @@ critique_agent = Agent(
     """),
     model=OpenAIChat(id="gpt-4.1-mini"),  # Using more capable model for managerial-level critique
     output_schema=CritiqueResult,
+    # Enable session state for tracking review iterations and feedback
+    session_state={
+        "revision_iteration": 0,
+        "manager_feedback": "No feedback yet",
+        "is_approved": False,
+    },
+    add_session_state_to_context=True,
     markdown=True,
 )
 
@@ -312,28 +339,31 @@ itinerary_step = Step(
 def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepOutput:  # type: ignore[arg-type]
     """
     Manager reviews the itinerary and provides feedback.
-    This function stores the critique feedback for the team lead to use.
+    Updates session_state with critique results for the team lead to access.
     """
     # Ensure session_state is initialized
     if run_context.session_state is None:
         run_context.session_state = {}
     
-    # Get iteration count from session state
-    iteration = run_context.session_state.get("revision_iteration", 0) + 1
-    run_context.session_state["revision_iteration"] = iteration
+    # Get the current draft from previous step
+    current_draft = step_input.previous_step_content or ""
     
-    print(f"\n🔍 Manager Review - Review #{iteration}/2")
+    # Store the current draft in session state for next revision
+    run_context.session_state["previous_draft"] = current_draft
     
-    # Build context for critique
-    itinerary_content = step_input.previous_step_content or ""
+    # Get current iteration
+    iteration = run_context.session_state.get("revision_iteration", 0)
     
+    print(f"\n🔍 Manager Review - Review #{iteration + 1}/2")
+    
+    # Build critique prompt
     critique_prompt = f"""
     You are the Manager reviewing a travel plan prepared by your team lead.
     
-    TRAVEL PLAN TO REVIEW (Draft #{iteration}):
-    {itinerary_content}
+    TRAVEL PLAN TO REVIEW (Draft #{iteration + 1}):
+    {current_draft}
     
-    {"This is the FINAL review - approve if it's reasonably good." if iteration >= 2 else "This is the initial review - provide constructive feedback."}
+    {"This is the FINAL review - approve if it's reasonably good." if iteration >= 1 else "This is the initial review - provide constructive feedback."}
     
     Evaluate the plan for:
     1. Completeness - Does it cover all aspects (destination info, hotels, activities, itinerary)?
@@ -344,9 +374,16 @@ def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepO
     Provide your structured assessment with specific improvement suggestions if needed.
     """
     
-    response = critique_agent.run(critique_prompt)
+    # Run critique agent with session_state
+    response = critique_agent.run(
+        critique_prompt,
+        session_state=run_context.session_state
+    )
     
     # Parse the critique result
+    is_approved = False
+    feedback_text = ""
+    
     if response.content:
         try:
             # Try to get structured output
@@ -354,31 +391,35 @@ def critique_and_revise(step_input: StepInput, run_context: RunContext) -> StepO
             
             if critique_data and isinstance(critique_data, CritiqueResult):
                 is_approved = critique_data.is_approved
+                feedback_text = f"{critique_data.overall_assessment}\n\nSpecific Feedback:\n{critique_data.specific_feedback}\n\nSuggestions:\n{critique_data.improvement_suggestions}"
             else:
                 # Fallback: parse from content
                 content_lower = str(response.content).lower()
                 is_approved = ("approved" in content_lower or "good" in content_lower) and "not approved" not in content_lower
+                feedback_text = str(response.content)
             
-            # Store in session state
-            run_context.session_state["critique_approved"] = is_approved
-            run_context.session_state["last_critique"] = response.content
-            
-            status = "✅ APPROVED" if is_approved else "🔄 NEEDS REVISION"
-            print(f"   Manager Decision: {status}")
-            
-            return StepOutput(
-                content=response.content,
-                success=True
-            )
         except Exception as e:
             print(f"   ⚠️ Error parsing critique: {e}")
             # Auto-approve after 2 iterations
-            run_context.session_state["critique_approved"] = iteration >= 2
-            return StepOutput(content=str(response.content), success=True)
+            is_approved = iteration >= 1
+            feedback_text = str(response.content) if response.content else "Critique completed"
+    else:
+        # Default: approve if we've done 2 iterations
+        is_approved = iteration >= 1
+        feedback_text = "Critique completed"
     
-    # Default: approve if we've done 2 iterations
-    run_context.session_state["critique_approved"] = iteration >= 2
-    return StepOutput(content="Critique completed", success=True)
+    # Update session state with critique results
+    run_context.session_state["is_approved"] = is_approved
+    run_context.session_state["manager_feedback"] = feedback_text
+    run_context.session_state["revision_iteration"] = iteration + 1
+    
+    status = "✅ APPROVED" if is_approved else "🔄 NEEDS REVISION"
+    print(f"   Manager Decision: {status}")
+    
+    return StepOutput(
+        content=feedback_text,
+        success=True
+    )
 
 
 # Custom step for critique
@@ -397,25 +438,15 @@ def revision_approved_condition(outputs: List[StepOutput], run_context: RunConte
     End condition for the revision loop between team lead and manager.
     Returns True to BREAK the loop (when approved or max iterations reached), False to continue.
     
-    This function checks both:
-    1. Session state (primary) - where critique agent stores approval decision
-    2. Outputs (fallback) - in case session state is not available
+    Checks session_state for approval status set by the critique agent.
     """
     # Ensure session_state is initialized
     if run_context.session_state is None:
         run_context.session_state = {}
     
-    # Primary check: session state (set by critique agent)
-    is_approved: bool = run_context.session_state.get("critique_approved", False)
+    # Get approval status and iteration from session state
+    is_approved: bool = run_context.session_state.get("is_approved", False)
     iteration: int = run_context.session_state.get("revision_iteration", 0)
-    
-    # Fallback check: if session state doesn't have approval info, check outputs
-    if not is_approved and outputs:
-        # Look for approval keywords in the last output (Manager's critique)
-        last_output = outputs[-1] if outputs else None
-        if last_output and last_output.content:
-            content_lower = str(last_output.content).lower()
-            is_approved = ("approved" in content_lower or "good" in content_lower) and "not approved" not in content_lower
     
     if is_approved:
         print(f"\n✅ Travel plan APPROVED by Manager after {iteration} iteration(s)!")
@@ -456,8 +487,9 @@ travel_planning_workflow = Workflow(
     # Initialize session state for tracking workflow progress
     session_state={
         "revision_iteration": 0,
-        "critique_approved": False,
-        "last_critique": "",
+        "is_approved": False,
+        "manager_feedback": "No feedback yet - this is the initial draft",
+        "previous_draft": "No previous draft",
     },
     steps=[  # type: ignore[arg-type]
         # Step 1: Research Team - Parallel research phase (runs ONCE only)
