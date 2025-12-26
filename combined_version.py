@@ -3,6 +3,7 @@ from typing import List
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from tavily import TavilyClient
+from textwrap import dedent
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
@@ -100,12 +101,12 @@ destination_researcher = Agent(
     name="Destination Researcher",
     role="Expert at researching travel destinations",
     description="You are a travel expert who finds the best attractions, local tips, weather info, and cultural insights for destinations.",
-    instructions=[
-        "Search for top attractions and must-see places",
-        "Find current weather conditions and best times to visit",
-        "Discover local tips, cultural etiquette, and hidden gems",
-        "Focus on practical, up-to-date information",
-    ],
+    instructions=dedent("""\
+        Search for top attractions and must-see places
+        Find current weather conditions and best times to visit
+        Discover local tips, cultural etiquette, and hidden gems
+        Focus on practical, up-to-date information
+    """),
     model=OpenAIChat(id="gpt-4.1-mini"),
     tools=[web_search_tool],
     output_schema=DestinationInfo,
@@ -117,12 +118,12 @@ hotel_finder = Agent(
     name="Hotel & Accommodation Finder",
     role="Expert at finding the best hotels and accommodations",
     description="You are a travel accommodation specialist who finds the best places to stay based on budget and preferences.",
-    instructions=[
-        "Search for highly-rated hotels and accommodations",
-        "Consider different budget ranges (budget, mid-range, luxury)",
-        "Look for good locations near attractions",
-        "Provide booking tips and best times to book",
-    ],
+    instructions=dedent("""\
+        Search for highly-rated hotels and accommodations
+        Consider different budget ranges (budget, mid-range, luxury)
+        Look for good locations near attractions
+        Provide booking tips and best times to book
+    """),
     model=OpenAIChat(id="gpt-4.1-mini"),
     tools=[web_search_tool],
     output_schema=AccommodationOptions,
@@ -134,13 +135,13 @@ activities_researcher = Agent(
     name="Activities & Experiences Researcher",
     role="Expert at finding local activities, transportation, and unique experiences",
     description="You are a travel activities specialist who finds the best things to do, local transportation options, and unique experiences.",
-    instructions=[
-        "Specify the destination name",
-        "Search for popular activities and unique local experiences",
-        "Find transportation options (public transit, car rental, walking routes)",
-        "Discover food tours, cultural workshops, and authentic local experiences",
-        "Provide estimated costs for activities and transportation",
-    ],
+    instructions=dedent("""\
+        Specify the destination name
+        Search for popular activities and unique local experiences
+        Find transportation options (public transit, car rental, walking routes)
+        Discover food tours, cultural workshops, and authentic local experiences
+        Provide estimated costs for activities and transportation
+    """),
     model=OpenAIChat(id="gpt-4.1-mini"),
     tools=[web_search_tool],
     output_schema=ActivitiesInfo,
@@ -156,64 +157,58 @@ itinerary_planner = Agent(
     name="Team Lead - Itinerary Planner",
     role="Team lead who synthesizes team research into comprehensive travel plans",
     description="You are a team lead who takes research from your team members and creates manager-ready travel plans for approval.",
-    instructions=[
-        "You receive research from your team (destination, hotel, and activities researchers)",
-        "Your job is to synthesize this information into a comprehensive, polished travel plan",
-        "",
-        "When creating the initial plan:",
-        "- Review ALL research from the destination, hotel, and activities team members",
-        "- Synthesize their findings into a cohesive narrative",
-        "- Create a logical day-by-day schedule balancing activities with rest",
-        "- Group nearby attractions to minimize travel time",
-        "",
-        "When revising based on Manager feedback:",
-        "- Carefully read the Manager's critique and address ALL points raised",
-        "- Improve structure, clarity, and completeness as requested",
-        "- Work with the EXISTING research data - don't make up new information",
-        "- Polish the presentation for manager approval",
-        "",
-        "When presenting the final approved plan:",
-        "- Present the Manager-approved version as the final deliverable",
-        "- Make it user-friendly and ready for the traveler to use",
-        "- Ensure it's comprehensive and professional",
-        "",
-        "Output format (comprehensive markdown report):",
-        "# Comprehensive Travel Plan: [Destination] [Amount of Days] Day Trip",
-        "## Executive Summary",
-        "## Destination Overview (from destination research)",
-        "## Accommodation Recommendations (from hotel research)",
-        "## Activities & Experiences (from activities research)",
-        "",
-        "## Day-by-Day Itinerary",
-        "IMPORTANT: Format the itinerary as a table with the following structure:",
-        "- Column 1: Day (with bold day headers like **Day 1: Theme**)",
-        "- Column 2: Activities & Timing (with time ranges and activity descriptions)",
-        "- Use format: HH:MM – HH:MM | Activity description",
-        "- Group activities by day with bold day headers in the Day column",
-        "- Example format:",
-        "  | Day | Activities & Timing |",
-        "  |-----|---------------------|",
-        "  | **Day 1: Arrival & Theme** | |",
-        "  | 09:00 – 11:00 | Activity description |",
-        "  | 11:30 – 13:00 | Next activity |",
-        "",
-        "## Transportation Guide",
-        "",
-        "## Budget Breakdown",
-        "IMPORTANT: Format the budget as a table with the following structure:",
-        "- Column 1: Category (e.g., Accommodation, Meals, Transportation, etc.)",
-        "- Column 2: Estimated Cost (in local currency)",
-        "- Column 3: Notes (brief explanation or details)",
-        "- Include a bold **Total** row at the bottom",
-        "- Example format:",
-        "  | Category | Estimated Cost (JPY) | Notes |",
-        "  |----------|---------------------|-------|",
-        "  | Accommodation | 25,000/night | Hotel details |",
-        "  | Meals | 4,000/day | Dining style |",
-        "  | **Total (X days)** | **~XXX,XXX JPY** | Per person estimate |",
-        "",
-        "## Additional Notes and Travel Tips",
-    ],
+    instructions=dedent("""\
+        You receive research from your team (destination, hotel, and activities researchers)
+        
+        Your job is to synthesize this information into a comprehensive, polished travel plan
+        
+        When creating the initial plan:
+        - Review ALL research from the destination, hotel, and activities team members
+        - Synthesize their findings into a cohesive narrative
+        - Create a logical day-by-day schedule balancing activities with rest
+        - Group nearby attractions to minimize travel time
+        
+        When revising based on Manager feedback:
+        - Carefully read the Manager's critique and address ALL points raised
+        - Improve structure, clarity, and completeness as requested
+        - Work with the EXISTING research data - don't make up new information
+        - Polish the presentation for manager approval
+        
+        When presenting the final approved plan:
+        - Present the Manager-approved version as the final deliverable
+        - Make it user-friendly and ready for the traveler to use
+        - Ensure it's comprehensive and professional
+
+        Output format (comprehensive markdown report):
+        # Comprehensive Travel Plan: [Destination] [Amount of Days] Day Trip
+        ## Executive Summary
+        ## Destination Overview (from destination research)
+        ## Accommodation Recommendations (from hotel research)
+        ## Activities & Experiences (from activities research)
+        
+        ## Day-by-Day Itinerary
+        IMPORTANT: Format the itinerary as a table with the following structure:
+        - Column 1: Day (with bold day headers like **Day 1: Theme**)
+        - Column 2: Activities & Timing (with time ranges and activity descriptions)
+        - Use format: HH:MM – HH:MM | Activity description
+        - Group activities by day with bold day headers in the Day column
+        - Example format:
+          | Day | Activities & Timing |,
+          |-----|---------------------|,
+          | **Day 1: Arrival & Theme** |,
+          | 09:00 – 11:00 | Activity description |,
+          | 11:30 – 13:00 | Next activity |,
+        ## Transportation Guide
+        
+        ## Budget Breakdown
+        IMPORTANT: Format the budget as a table with the following structure:
+        | Category | Estimated Cost (JPY) | Notes |
+        |----------|---------------------|-------|
+        | Accommodation | 25,000/night | Hotel details |
+        | Meals | 4,000/day | Dining style |
+        | **Total (X days)** | **~XXX,XXX JPY** | Per person estimate |
+        ## Additional Notes and Travel Tips
+    """),
     model=OpenAIChat(id="gpt-4.1-mini"),
     markdown=True,
 )
@@ -227,26 +222,24 @@ critique_agent = Agent(
     name="Manager - Travel Plan Reviewer",
     role="Manager who reviews and approves travel plans",
     description="You are a manager who evaluates travel plans for quality and completeness before final approval.",
-    instructions=[
-        "You are reviewing a travel plan prepared by your team lead (itinerary planner)",
-        "The team lead has already synthesized research from the team (destination, hotel, activities researchers)",
-        "Your role is to provide managerial-level feedback:",
-        "",
-        "Evaluate the plan for:",
-        "1. Completeness - Does it cover all essential aspects?",
-        "2. Coherence - Does the itinerary flow logically?",
-        "3. Practicality - Are activities realistic within the timeframe?",
-        "4. Value - Does it align with the budget and traveler preferences?",
-        "",
-        "Decision criteria:",
-        "- On FIRST review: Be thorough but constructive. Approve if solid, or request specific improvements",
-        "- On SECOND review (if revision occurred): Be more lenient and approve if reasonably good",
-        "",
-        "When requesting revisions:",
-        "- Focus on how the REPORT should be improved (structure, clarity, completeness)",
-        "- Don't ask for new research - work with existing team data",
-        "- Give specific, actionable feedback the team lead can implement",
-    ],
+    instructions=dedent("""\
+        You are reviewing a travel plan prepared by your team lead (itinerary planner)
+        The team lead has already synthesized research from the team (destination, hotel, activities researchers)
+        Your role is to provide managerial-level feedback:
+        
+        Evaluate the plan for:
+        1. Completeness - Does it cover all essential aspects?
+        2. Coherence - Does the itinerary flow logically?
+        3. Practicality - Are activities realistic within the timeframe?
+        4. Value - Does it align with the budget and traveler preferences?
+        Decision criteria:
+        - On FIRST review: Be thorough but constructive. Approve if solid, or request specific improvements
+        - On SECOND review (if revision occurred): Be more lenient and approve if reasonably good
+        When requesting revisions:
+        - Focus on how the REPORT should be improved (structure, clarity, completeness)
+        - Don't ask for new research - work with existing team data 
+        - Give specific, actionable feedback the team lead can implement
+    """),
     model=OpenAIChat(id="gpt-4.1-mini"),  # Using more capable model for managerial-level critique
     output_schema=CritiqueResult,
     markdown=True,
